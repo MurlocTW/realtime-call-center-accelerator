@@ -40,6 +40,20 @@ upload_documents() {
         exit 1
     fi
 
+    echo "Clearing all blobs in container '$AZURE_STORAGE_CONTAINER'..."
+
+    az storage blob delete-batch \
+    --account-name "$AZURE_STORAGE_ACCOUNT" \
+    --source "$AZURE_STORAGE_CONTAINER" \
+    --auth-mode login
+
+    if [ $? -ne 0 ]; then
+        echo "Failed to clear container $AZURE_STORAGE_CONTAINER"
+        exit 1
+    fi
+
+    echo "Container cleared."
+
     # Iterate over all files in the data folder
     for FILE in "$DATA_FOLDER"/*; do
         # Check if the file exists and is a regular file
