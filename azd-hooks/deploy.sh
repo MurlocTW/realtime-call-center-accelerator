@@ -2,6 +2,8 @@
 
 # set -e
 
+set -euo pipefail
+
 SERVICE_NAME="$1"
 
 if [ "$SERVICE_NAME" == "" ]; then
@@ -126,6 +128,6 @@ SCRIPT_DIR=$(dirname "$0")
 PROJECT_ROOT="$SCRIPT_DIR/../"
 cd "$PROJECT_ROOT"
 echo "Current directory after changing to project root: $(pwd)"
-sh scripts/upload_data.sh
+# sh scripts/upload_data.sh
 
 echo "Deployment complete. Application URI: $URI"

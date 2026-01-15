@@ -51,7 +51,7 @@ async function startRecording() {
   // Open WebSocket connection
   const mainHost = window.location.host;
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  websocket = new WebSocket(`${protocol}//${mainHost}/realtime`);
+  websocket = new WebSocket(`${protocol}//${mainHost}/mic`);
 
   websocket.onopen = () => {
     console.log('WebSocket connection opened');
