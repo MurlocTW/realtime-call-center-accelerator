@@ -14,12 +14,16 @@ body {
 }
 
 main.container {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: center !important;
   align-items: flex-start;
-  height: 50vh; /* Take up the bottom half */
+  height: 50vh;
   width: 100%;
+  max-width: 100% !important;
+  padding: 0 2rem !important;
+  margin: 0 !important;
+  box-sizing: border-box;
 }
 
 #configButton {
@@ -53,15 +57,15 @@ div.main-container {
   bottom: 0;
   width: 100%;
   height: 50vh;
-  margin-right: 100px;
 }
 
 article {
-  background-color: rgba(255, 255, 255, 0.8);
-  padding: 2rem;
-  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  padding: 2rem !important;
+  border-radius: 10px !important;
   max-width: 600px;
-  margin: 10px;
+  margin: 10px !important;
+  box-shadow: none !important;
 }
 
 .separator {
@@ -78,9 +82,13 @@ article {
 
 h1 {
   margin-bottom: 30px;
-  color: #fff;
+  color: #fff !important;
   font-weight: bold;
   font-size: 2.5em;
+}
+
+h2 {
+  color: #fff !important;
 }
 
 h3 {
@@ -178,6 +186,7 @@ form button {
 
 .container {
   flex: 1;
+  max-width: 100% !important;
 }
 
 .logo-container {

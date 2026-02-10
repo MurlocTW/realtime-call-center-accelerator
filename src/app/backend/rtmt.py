@@ -1,8 +1,9 @@
 import aiohttp
 import asyncio
 import json
-from typing import Any, Optional
-from aiohttp import ClientWebSocketResponse, web
+from typing import Any, Optional, Union
+from aiohttp import ClientWebSocketResponse
+from starlette.websockets import WebSocket as StarletteWebSocket
 from azure.identity import DefaultAzureCredential, AzureDeveloperCliCredential, get_bearer_token_provider
 from azure.core.credentials import AzureKeyCredential
 from backend.tools.tools import RTToolCall, Tool, ToolResultDirection
@@ -32,13 +33,19 @@ class RTMiddleTier:
     def __init__(self, endpoint: str, deployment: str, credentials: AzureKeyCredential | AzureDeveloperCliCredential | DefaultAzureCredential):
         self.endpoint = endpoint
         self.deployment = deployment
+        self.tools = {}
+        self._tools_pending = {}
         if isinstance(credentials, AzureKeyCredential):
             self.key = credentials.key
         else:
             self._token_provider = get_bearer_token_provider(credentials, "https://cognitiveservices.azure.com/.default")
             self._token_provider() # Warm up during startup so we have a token cached when the first request arrives
 
-    async def _process_message_to_client(self, message: Any, client_ws: web.WebSocketResponse, server_ws: ClientWebSocketResponse, is_acs_audio_stream: bool):
+    async def _send_to_client(self, client_ws: StarletteWebSocket, message: dict):
+        """Send message to client WebSocket (FastAPI/Starlette)."""
+        await client_ws.send_text(json.dumps(message))
+
+    async def _process_message_to_client(self, message: Any, client_ws: StarletteWebSocket, server_ws: ClientWebSocketResponse, is_acs_audio_stream: bool):
         # This method basically follows a 3-step process:
         # 1. Check if we need to react to the message (e.g. a function call needs to me made)
         # 2. Check if we need to transform the message to a different format (e.g. when we use Azure Communication Services)
@@ -104,7 +111,7 @@ class RTMiddleTier:
                             if is_acs_audio_stream == False:
                                 # TODO: this will break clients that don't know about this extra message, rewrite
                                 # this to be a regular text message with a special marker of some sort
-                                await client_ws.send_json({
+                                await self._send_to_client(client_ws, {
                                     "type": "extension.middle_tier_tool_response",
                                     "previous_item_id": tool_call.previous_id,
                                     "tool_name": item["name"],
@@ -150,9 +157,9 @@ class RTMiddleTier:
             message = transform_openai_to_acs_format(message)
 
         if message is not None:
-            await client_ws.send_str(json.dumps(message))
+            await self._send_to_client(client_ws, message)
 
-    async def _process_message_to_server(self, data: Any, ws: web.WebSocketResponse, server_ws: ClientWebSocketResponse, is_acs_audio_stream: bool):
+    async def _process_message_to_server(self, data: Any, client_ws: StarletteWebSocket, server_ws: ClientWebSocketResponse, is_acs_audio_stream: bool):
         # If the message comes from the Azure Communication Services audio stream, transform it to the OpenAI Realtime API format first
         if (is_acs_audio_stream):
             data = transform_acs_to_openai_format(data, self.model, self.tools, self.system_message, self.temperature, self.max_tokens, self.disable_audio, self.selected_voice)
@@ -176,13 +183,11 @@ class RTMiddleTier:
 
             await server_ws.send_str(json.dumps(data))
 
-    async def forward_messages(self, ws: web.WebSocketResponse, is_acs_audio_stream: bool):
+    async def forward_messages(self, ws: StarletteWebSocket, is_acs_audio_stream: bool):
         async with aiohttp.ClientSession(base_url=self.endpoint) as session:
             params = { "api-version": "2024-10-01-preview", "deployment": self.deployment }
 
             headers = {}
-            if "x-ms-client-request-id" in ws.headers:
-                headers["x-ms-client-request-id"] = ws.headers["x-ms-client-request-id"]
 
             # Setup authentication headers for the OpenAI Realtime API WebSocket connection
             if self.key is not None:
@@ -197,12 +202,14 @@ class RTMiddleTier:
             async with session.ws_connect("/openai/realtime", headers=headers, params=params) as target_ws:
                 async def from_client_to_server():
                     # Messages from Azure Communication Services or the Web Frontend are forwarded to the OpenAI Realtime API
-                    async for msg in ws:
-                        if msg.type == aiohttp.WSMsgType.TEXT:
-                            data = json.loads(msg.data)
+                    try:
+                        while True:
+                            msg = await ws.receive_text()
+                            data = json.loads(msg)
                             await self._process_message_to_server(data, ws, target_ws, is_acs_audio_stream)
-                        else:
-                            print("Error: unexpected message type:", msg.type)
+                    except Exception as e:
+                        # Client disconnected or error
+                        pass
 
                 async def from_server_to_client():
                     # Messages from the OpenAI Realtime API are forwarded to the Azure Communication Services or the Web Frontend

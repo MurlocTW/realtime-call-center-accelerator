@@ -4,18 +4,30 @@
 
 set -euo pipefail
 
-SERVICE_NAME="$1"
+# Load configuration from config.yml
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$PROJECT_ROOT/scripts/load_config.sh"
 
-if [ "$SERVICE_NAME" == "" ]; then
-echo "No phase name provided - aborting"
-exit 0;
+# Config.yml takes precedence over command line arguments
+# Command line args are only used as fallback if config values are empty
+SERVICE_NAME_ARG="${1:-}"
+AZURE_ENV_NAME_ARG="${2:-}"
+
+# config.yml > environment variable > command line argument
+SERVICE_NAME="${SERVICE_NAME:-${SERVICE_NAME_ARG}}"
+AZURE_ENV_NAME="${CONFIG_RES_NAME:-${AZURE_ENV_NAME:-${AZURE_ENV_NAME_ARG}}}"
+
+if [ -z "$SERVICE_NAME" ]; then
+    echo "Error: No service name provided."
+    echo "Either set 'environment.service_name' in config.yml or provide as argument: $0 <service_name> <env_name>"
+    exit 1
 fi
 
-AZURE_ENV_NAME="$2"
-
-if [ "$AZURE_ENV_NAME" == "" ]; then
-echo "No environment name provided - aborting"
-exit 0;
+if [ -z "$AZURE_ENV_NAME" ]; then
+    echo "Error: No environment name provided."
+    echo "Either set 'environment.res_name' in config.yml or provide as argument: $0 <service_name> <env_name>"
+    exit 1
 fi
 
 if [[ $SERVICE_NAME =~ ^[a-z0-9]{3,12}$ ]]; then
@@ -48,10 +60,9 @@ IDENTITY_NAME=$(az resource list -g $RESOURCE_GROUP --resource-type "Microsoft.M
 AZURE_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 # Get Azure Search service name
 AZURE_SEARCH_NAME=$(az resource list -g $RESOURCE_GROUP --resource-type "Microsoft.Search/searchServices" --query "[0].name" -o tsv)
-# Get the first index name from the Azure Search service
-AZURE_SEARCH_INDEX_NAME="voicerag-intvect"
-# Get the semantic configuration setting
-AZURE_SEARCH_SEMANTIC_CONFIGURATION="default"
+# Get configuration values from config.yml (already loaded via load_config.sh)
+AZURE_SEARCH_INDEX_NAME="$AZURE_SEARCH_INDEX"
+AZURE_SEARCH_SEMANTIC_CONFIGURATION="$AZURE_SEARCH_SEMANTIC_CONFIGURATION"
 # Get Azure Search API key
 AZURE_SEARCH_API_KEY=$(az search admin-key show --service-name $AZURE_SEARCH_NAME --resource-group $RESOURCE_GROUP --query "primaryKey" -o tsv)
 # Get Azure Storage account name
@@ -102,12 +113,21 @@ echo "deploying image: $IMAGE_NAME"
 # Deploy the container app
 ACA_NAME=callcenter$SERVICE_NAME
 URI=$(az deployment group create -g $RESOURCE_GROUP -f ./infra/core/app/web.bicep \
-          -p aiSearchName=$AZURE_SEARCH_NAME  -p storageAccountName=$STORAGE_ACCOUNT_NAME -p name=$ACA_NAME \
+          -p aiSearchName=$AZURE_SEARCH_NAME -p storageAccountName=$STORAGE_ACCOUNT_NAME -p name=$ACA_NAME \
           -p location=$LOCATION -p containerAppsEnvironmentName=$ENVIRONMENT_NAME \
           -p containerRegistryName=$AZURE_CONTAINER_REGISTRY_NAME -p applicationInsightsName=$APPINSIGHTS_NAME \
-          -p communicationServiceName=$AZURE_COMMUNICATION_SERVICES_NAME -p serviceName=$SERVICE_NAME  \
+          -p communicationServiceName=$AZURE_COMMUNICATION_SERVICES_NAME -p serviceName=$SERVICE_NAME \
           -p communicationServicePhoneNumber=$AZURE_COMMUNICATION_SERVICES_PHONE_NUMBER \
           -p openaiName=$OPENAI_NAME -p identityName=$IDENTITY_NAME -p imageName=$IMAGE_NAME \
+          -p completionDeploymentName=$AZURE_OPENAI_COMPLETION_DEPLOYMENT_NAME \
+          -p chatDeploymentName=$AZURE_OPENAI_CHAT_DEPLOYMENT_NAME \
+          -p openaiApiVersion=$AZURE_OPENAI_VERSION \
+          -p searchIndexName=$AZURE_SEARCH_INDEX_NAME \
+          -p searchSemanticConfiguration=$AZURE_SEARCH_SEMANTIC_CONFIGURATION \
+          -p containerCpu=$CONTAINER_APP_CPU \
+          -p containerMemory=$CONTAINER_APP_MEMORY \
+          -p minReplicas=$CONTAINER_APP_MIN_REPLICAS \
+          -p maxReplicas=$CONTAINER_APP_MAX_REPLICAS \
           --query properties.outputs.uri.value)
 
 echo "updating container app settings"
@@ -119,7 +139,11 @@ CONTAINER_APP_HOSTNAME=$(az containerapp show --name $ACA_NAME --resource-group 
 az containerapp update --name $ACA_NAME --resource-group $RESOURCE_GROUP \
 --set-env-vars ACS_CALLBACK_PATH="https://$CONTAINER_APP_HOSTNAME/acs" \
                ACS_MEDIA_STREAMING_WEBSOCKET_PATH="wss://$CONTAINER_APP_HOSTNAME/realtime-acs" \
-               AZURE_SEARCH_API_KEY="$AZURE_SEARCH_API_KEY" AZURE_SEARCH_INDEX="$AZURE_SEARCH_INDEX_NAME"  \
+               AZURE_OPENAI_CHAT_DEPLOYMENT_NAME="$AZURE_OPENAI_CHAT_DEPLOYMENT_NAME" \
+               AZURE_OPENAI_COMPLETION_DEPLOYMENT_NAME="$AZURE_OPENAI_COMPLETION_DEPLOYMENT_NAME" \
+               AZURE_OPENAI_VERSION="$AZURE_OPENAI_VERSION" \
+               AZURE_SEARCH_API_KEY="$AZURE_SEARCH_API_KEY" \
+               AZURE_SEARCH_INDEX="$AZURE_SEARCH_INDEX_NAME" \
                AZURE_SEARCH_SEMANTIC_CONFIGURATION="$AZURE_SEARCH_SEMANTIC_CONFIGURATION"
 
 # Configuration of Azure AI search index

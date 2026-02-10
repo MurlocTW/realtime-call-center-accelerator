@@ -1,9 +1,13 @@
 import json
+import logging
+import uuid
 from typing import Optional, List, Dict, Any
 from openai import AsyncAzureOpenAI
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from azure.core.credentials import AzureKeyCredential
 from backend.tools.tools import Tool, ToolResultDirection
+
+logger = logging.getLogger("voicerag")
 
 
 class ChatHandler:
@@ -20,6 +24,9 @@ class ChatHandler:
         self.deployment = deployment
         self.system_message = system_message
         self.tools: dict[str, Tool] = {}
+        self.sessions: Dict[str, List[Dict[str, str]]] = {}  # session_id -> message history
+
+        logger.warning(f"ChatHandler initialized with deployment: '{deployment}' (endpoint: {endpoint})")
 
         # Initialize AsyncAzureOpenAI client
         if isinstance(credentials, AzureKeyCredential):
@@ -39,31 +46,76 @@ class ChatHandler:
                 api_version="2024-10-01-preview"
             )
 
+    def create_session(self) -> str:
+        """Create a new chat session and return its ID."""
+        session_id = str(uuid.uuid4())
+        self.sessions[session_id] = []
+        return session_id
+
+    def get_session(self, session_id: str) -> Optional[List[Dict[str, str]]]:
+        """Get message history for a session."""
+        return self.sessions.get(session_id)
+
+    def delete_session(self, session_id: str) -> bool:
+        """Delete a session and return True if it existed."""
+        if session_id in self.sessions:
+            del self.sessions[session_id]
+            return True
+        return False
+
     async def chat(
         self,
-        messages: List[Dict[str, str]],
+        content: str,
+        session_id: Optional[str] = None,
         max_tokens: int = 4096,
         temperature: float = 0.7
     ) -> Dict[str, Any]:
         """
-        Process a chat request with RAG tool support.
+        Process a chat request with RAG tool support and session management.
 
         Args:
-            messages: List of message dicts with 'role' and 'content'
+            content: The user message content
+            session_id: Optional session ID for multi-turn conversation
             max_tokens: Maximum tokens in response
             temperature: Sampling temperature
 
         Returns:
-            Dict containing response message and any grounding sources
+            Dict containing response message, session_id, and any grounding sources
         """
+        # Create or get session
+        is_new_session = False
+        if session_id is None or session_id not in self.sessions:
+            session_id = self.create_session()
+            is_new_session = True
+
+        # Add user message to session history
+        user_message = {"role": "user", "content": content}
+        self.sessions[session_id].append(user_message)
+
         # Prepare messages with system prompt
         full_messages = []
         if self.system_message:
             full_messages.append({"role": "system", "content": self.system_message})
-        full_messages.extend(messages)
+        full_messages.extend(self.sessions[session_id])
 
-        # Prepare tools for function calling
-        tools_schema = [tool.schema for tool in self.tools.values()] if self.tools else None
+        # Prepare tools for function calling (convert Realtime API format to Chat API format)
+        tools_schema = None
+        if self.tools:
+            tools_schema = []
+            for tool in self.tools.values():
+                schema = tool.schema
+                # Realtime API uses flat structure, Chat API needs nested "function" key
+                if "function" not in schema:
+                    tools_schema.append({
+                        "type": "function",
+                        "function": {
+                            "name": schema.get("name"),
+                            "description": schema.get("description"),
+                            "parameters": schema.get("parameters")
+                        }
+                    })
+                else:
+                    tools_schema.append(schema)
 
         # Initial API call
         response = await self.client.chat.completions.create(
@@ -137,10 +189,15 @@ class ChatHandler:
                 tool_choice="auto" if tools_schema else None
             )
 
+        # Save assistant response to session history
+        assistant_content = response.choices[0].message.content or ""
+        self.sessions[session_id].append({"role": "assistant", "content": assistant_content})
+
         return {
+            "session_id": session_id,
             "message": {
                 "role": "assistant",
-                "content": response.choices[0].message.content or ""
+                "content": assistant_content
             },
             "grounding_sources": grounding_sources,
             "usage": {

@@ -43,7 +43,7 @@ param searchEmbeddingField string
 param searchUseVectorQuery bool
 
 @description('Name of the AI search index to be created or updated, must be lowercase.')
-param indexName string = 'voicerag-intvect'
+param indexName string = searchIndexName
 
 @description('Datasource definition as base64 encoded json.')
 param dataSource string = loadFileAsBase64('definitions/datasource.json')
@@ -58,8 +58,9 @@ param skillset string = loadFileAsBase64('definitions/skillset.json')
 param indexer string = loadFileAsBase64('definitions/indexer.json')
 
 param storageAccountName string = ''
-param storageContainerName string = 'content'
-param storageSkuName string = 'Standard_LRS'
+param storageContainerName string
+param storageSkuName string
+param promptContainerName string = 'prompt'
 
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
@@ -70,23 +71,49 @@ var principalType = 'User'
 
 param logAnalyticsName string = ''
 param applicationInsightsName string = ''
-param completionDeploymentModelName string = 'gpt-4o-realtime-preview'
-param completionModelName string = 'gpt-4o-realtime-preview'
-param completionModelVersion string = '2024-12-17'
-param openaiApiVersion string = '2024-10-01-preview'
+
+// Azure OpenAI - Completion/Realtime Deployment
+param completionDeploymentModelName string
+param completionModelName string
+param completionModelVersion string
+param realtimeDeploymentCapacity int = 1
+
+// Azure OpenAI - Chat Deployment (Text-based)
+param chatDeploymentModelName string
+param chatModelName string
+param chatModelVersion string
+param chatDeploymentCapacity int
+
+// Azure OpenAI - API Configuration
+param openaiApiVersion string
+
+// Azure OpenAI - Embedding Deployment
 param embeddingDeploymentCapacity int
-param embedModel string = 'text-embedding-3-large'
+param embedModel string
+param embedModelVersion string = '1'
 param modelDeployments array = [
   {
     name: completionDeploymentModelName
     sku: {
       name: 'GlobalStandard'
-      capacity: 1
+      capacity: realtimeDeploymentCapacity
     }
     model: {
-      format: 'OpenAI'      
+      format: 'OpenAI'
       name: completionModelName
       version: completionModelVersion
+    }
+  }
+  {
+    name: chatDeploymentModelName
+    sku: {
+      name: 'Standard'
+      capacity: chatDeploymentCapacity
+    }
+    model: {
+      format: 'OpenAI'
+      name: chatModelName
+      version: chatModelVersion
     }
   }
   {
@@ -94,7 +121,7 @@ param modelDeployments array = [
     model: {
       format: 'OpenAI'
       name: embedModel
-      version: '1'
+      version: embedModelVersion
     }
     sku: {
       name: 'Standard'
@@ -235,7 +262,7 @@ module storage 'br/public:avm/res/storage/storage-account:0.9.1' = {
           publicAccess: 'None'
         }
         {
-          name: 'prompt'
+          name: promptContainerName
           publicAccess: 'None'
         }
       ]
@@ -315,6 +342,9 @@ output AZURE_OPENAI_API_KEY string = openai.outputs.openaiKey
 output AZURE_OPENAI_ENDPOINT string = openai.outputs.openaiEndpoint
 output AZURE_OPENAI_COMPLETION_MODEL string = completionModelName
 output AZURE_OPENAI_COMPLETION_DEPLOYMENT_NAME string = completionDeploymentModelName
+
+output AZURE_OPENAI_CHAT_DEPLOYMENT_NAME string = chatDeploymentModelName
+output AZURE_OPENAI_CHAT_MODEL string = chatModelName
 
 output AZURE_OPENAI_EMBEDDING_DEPLOYMENT string = embedModel
 output AZURE_OPENAI_EMBEDDING_MODEL string = embedModel

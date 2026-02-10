@@ -13,6 +13,21 @@ param serviceName string = 'web'
 param imageName string
 param openaiName string
 
+// Azure OpenAI Configuration Parameters
+param completionDeploymentName string = 'gpt-4o-realtime-preview'
+param chatDeploymentName string = 'gpt-4.1'
+param openaiApiVersion string = '2024-10-01-preview'
+
+// Azure Search Configuration Parameters
+param searchIndexName string = 'voicerag-intvect'
+param searchSemanticConfiguration string = 'default'
+
+// Container Resources
+param containerCpu string = '1'
+param containerMemory string = '2.0Gi'
+param minReplicas int = 1
+param maxReplicas int = 2
+
 resource userIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: identityName
 }
@@ -31,7 +46,7 @@ resource app 'Microsoft.App/containerApps@2023-04-01-preview' = {
       activeRevisionsMode: 'single'     
       ingress: {
         external: true
-        targetPort: 8000
+        targetPort: 8765
         transport: 'auto'
       }
       registries: [
@@ -61,11 +76,15 @@ resource app 'Microsoft.App/containerApps@2023-04-01-preview' = {
             }
             {
               name: 'AZURE_OPENAI_COMPLETION_DEPLOYMENT_NAME'
-              value: 'gpt-4o-realtime-preview'
+              value: completionDeploymentName
+            }
+            {
+              name: 'AZURE_OPENAI_CHAT_DEPLOYMENT_NAME'
+              value: chatDeploymentName
             }
             {
               name: 'AZURE_OPENAI_VERSION'
-              value: '2024-12-17'
+              value: openaiApiVersion
             }
             {
               name: 'OPENAI_API_TYPE'
@@ -109,14 +128,14 @@ resource app 'Microsoft.App/containerApps@2023-04-01-preview' = {
             }
           ]
           resources: {
-            cpu: json('1')
-            memory: '2.0Gi'
+            cpu: json(containerCpu)
+            memory: containerMemory
           }
         }
       ]
       scale: {
-        minReplicas: 1
-        maxReplicas: 2
+        minReplicas: minReplicas
+        maxReplicas: maxReplicas
       }
     }
   }

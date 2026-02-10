@@ -2,6 +2,17 @@ name: ai-agents-as-a-platform
 metadata:
   template: openai-plugin-fastapi@0.0.1-beta
 hooks:
+  preprovision:
+    posix:
+      shell: sh
+      continueOnError: false
+      interactive: false
+      run: scripts/set_azd_env.sh
+    windows:
+      shell: pwsh
+      continueOnError: false
+      interactive: false
+      run: scripts/set_azd_env.ps1
   postprovision:
     posix:
       shell: sh

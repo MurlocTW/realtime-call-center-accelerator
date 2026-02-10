@@ -1,4 +1,4 @@
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
@@ -13,13 +13,12 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY ./requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-FROM python:3.11-slim
-ARG FILENAME
-ARG PORT=8000
-ARG HOST=0.0.0.0
+FROM python:3.12-slim
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+ENV HOST=0.0.0.0
+ENV PORT=8765
 COPY . .
-EXPOSE $PORT
-ENTRYPOINT [ "gunicorn", "app:create_app", "-b 0.0.0.0:8000", "--worker-class",  "aiohttp.GunicornWebWorker", "--reload", "--access-logfile", "-" ]
+EXPOSE 8765
+CMD ["sh", "-c", "uvicorn app:app --host ${HOST} --port ${PORT}"]

@@ -172,5 +172,7 @@ cython_debug/
 
 .DS_Store
 
+# Configuration files (may contain sensitive data)
+config.yml
 
 data/

@@ -11,17 +11,11 @@
     "principalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
     },
-    "openaiCapacity": {
-      "value": "${OPENAI_CAPACITY}"
-    },
     "searchServiceSkuName": {
       "value": "${AZURE_SEARCH_SERVICE_SKU=standard}"
     },
     "searchServiceSemanticRankerLevel": {
       "value": "${AZURE_SEARCH_SEMANTIC_RANKER=free}"
-    },
-    "searchEndpoint": {
-      "value": "${AZURE_SEARCH_ENDPOINT}"
     },
     "searchIndexName": {
       "value": "${AZURE_SEARCH_INDEX=voicerag-intvect}"
@@ -45,22 +39,58 @@
       "value": "${AZURE_SEARCH_USE_VECTOR_QUERY=true}"
     },
     "storageAccountName": {
-      "value": "${AZURE_STORAGE_ACCOUNT}"
+      "value": "${AZURE_STORAGE_ACCOUNT=}"
     },
     "searchServiceLocation": {
-      "value": "${AZURE_SEARCH_SERVICE_LOCATION}"
+      "value": "${AZURE_SEARCH_SERVICE_LOCATION=}"
     },
     "aiResourceLocation": {
-      "value": "${AZURE_AI_RESOURCE_LOCATION}"
+      "value": "${AZURE_AI_RESOURCE_LOCATION=swedencentral}"
+    },
+    "completionDeploymentModelName": {
+      "value": "${AZURE_OPENAI_COMPLETION_DEPLOYMENT_NAME=gpt-4o-realtime-preview}"
+    },
+    "completionModelName": {
+      "value": "${AZURE_OPENAI_COMPLETION_MODEL=gpt-4o-realtime-preview}"
+    },
+    "completionModelVersion": {
+      "value": "${AZURE_OPENAI_COMPLETION_MODEL_VERSION=2024-12-17}"
     },
     "realtimeDeploymentCapacity": {
       "value": "${AZURE_OPENAI_REALTIME_DEPLOYMENT_CAPACITY=1}"
     },
+    "chatDeploymentModelName": {
+      "value": "${AZURE_OPENAI_CHAT_DEPLOYMENT_NAME=gpt-4.1}"
+    },
+    "chatModelName": {
+      "value": "${AZURE_OPENAI_CHAT_MODEL=gpt-4.1}"
+    },
+    "chatModelVersion": {
+      "value": "${AZURE_OPENAI_CHAT_MODEL_VERSION=2025-04-14}"
+    },
+    "chatDeploymentCapacity": {
+      "value": "${AZURE_OPENAI_CHAT_DEPLOYMENT_CAPACITY=10}"
+    },
+    "embedModel": {
+      "value": "${AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-large}"
+    },
+    "embedModelVersion": {
+      "value": "${AZURE_OPENAI_EMBEDDING_MODEL_VERSION=1}"
+    },
     "embeddingDeploymentCapacity": {
       "value": "${AZURE_OPENAI_EMB_DEPLOYMENT_CAPACITY=30}"
     },
-    "embeddingDimensions": {
-      "value": "${AZURE_OPENAI_EMB_DIMENSIONS}"
+    "openaiApiVersion": {
+      "value": "${AZURE_OPENAI_VERSION=2024-10-01-preview}"
+    },
+    "storageContainerName": {
+      "value": "${AZURE_STORAGE_CONTAINER=content}"
+    },
+    "storageSkuName": {
+      "value": "${AZURE_STORAGE_SKU=Standard_LRS}"
+    },
+    "promptContainerName": {
+      "value": "${AZURE_STORAGE_PROMPT_CONTAINER=prompt}"
     }
   }
 }
