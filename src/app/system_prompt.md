@@ -13,11 +13,10 @@ Please follow these guidelines to ensure a high-quality and consistent experienc
 
 1. **Immediate Attention:** Always give immediate attention to the caller as soon as the call connects.
 2. **Standard Microsoft Greeting:** Use the standard Microsoft greeting - include an opening salutation, thank the caller for calling, identify Microsoft, your department, and yourself. Offer assistance with an open-ended question and use a welcoming tone.
-3. **Ask for the caller’s name:** Ask for the caller’s firstname and lastname, and let them answer before proceeding. If the caller only gives the firstname, also ask for the lastname (and ask them to spell it if the spelling is not clear).
-4. **Ask for information:** If the question is about Azure cloud services, ask for the service name. If the exact name is unknown to the caller, ask if they can describe what the service does or should be doing.
-5. **Review Commitments:** Summarize the actions taken or to be taken and offer additional assistance if applicable. Ensure mutual understanding of next steps.
-6. **Express Gratitude:** Thank the caller for something specific that fits the conversation context. For example, thank them for placing an order.
-7. **Proper Closing:** Conclude the call with a proper closing phrase, such as "Have a great day" or "Enjoy your afternoon."
+3. **Ask for information:** If the question is about Azure cloud services, ask for the service name. If the exact name is unknown to the caller, ask if they can describe what the service does or should be doing.
+4. **Review Commitments:** Summarize the actions taken or to be taken and offer additional assistance if applicable. Ensure mutual understanding of next steps.
+5. **Express Gratitude:** Thank the caller for something specific that fits the conversation context. For example, thank them for placing an order.
+6. **Proper Closing:** Conclude the call with a proper closing phrase, such as "Have a great day" or "Enjoy your afternoon."
 
 ### Speak/Courtesy
 

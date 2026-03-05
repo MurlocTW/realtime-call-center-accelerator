@@ -105,6 +105,9 @@ async def lifespan(app: FastAPI):
     # Create Chat handler (for text)
     chat_handler = ChatHandler(llm_endpoint, chat_deployment, llm_credential)
 
+    # Start cleanup task for session TTL management
+    await chat_handler.start_cleanup_task(cleanup_interval_seconds=300)  # 5 minutes
+
     # Set the system prompt
     system_prompt = None
     try:
@@ -136,7 +139,10 @@ async def lifespan(app: FastAPI):
 
     yield  # App is running
 
-    # Cleanup on shutdown (if needed)
+    # Cleanup on shutdown
+    if chat_handler:
+        await chat_handler.stop_cleanup_task()
+    logger.info("Application shutdown complete")
 
 
 # Create FastAPI app
@@ -292,6 +298,15 @@ async def chat(request: ChatRequest):
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/chat/sessions/stats", tags=["Text Chat"], include_in_schema=False)
+async def get_session_stats():
+    """Get statistics about current chat sessions (for monitoring/debugging)."""
+    if chat_handler is None:
+        raise HTTPException(status_code=503, detail="Chat handler not initialized")
+
+    return chat_handler.get_session_stats()
 
 
 # ============ PDF Management API ============

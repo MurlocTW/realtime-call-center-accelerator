@@ -1,6 +1,9 @@
+import asyncio
 import json
 import logging
+import time
 import uuid
+from threading import Lock
 from typing import Optional, List, Dict, Any
 from openai import AsyncAzureOpenAI
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
@@ -24,7 +27,10 @@ class ChatHandler:
         self.deployment = deployment
         self.system_message = system_message
         self.tools: dict[str, Tool] = {}
-        self.sessions: Dict[str, List[Dict[str, str]]] = {}  # session_id -> message history
+        self.sessions: Dict[str, Dict[str, Any]] = {}  # session_id -> {messages, last_access, created_at}
+        self._session_lock = Lock()
+        self._cleanup_task: Optional[asyncio.Task] = None
+        self.session_ttl_seconds: int = 1800  # 30 minutes
 
         logger.warning(f"ChatHandler initialized with deployment: '{deployment}' (endpoint: {endpoint})")
 
@@ -49,19 +55,109 @@ class ChatHandler:
     def create_session(self) -> str:
         """Create a new chat session and return its ID."""
         session_id = str(uuid.uuid4())
-        self.sessions[session_id] = []
+        current_time = time.time()
+        with self._session_lock:
+            self.sessions[session_id] = {
+                "messages": [],
+                "last_access": current_time,
+                "created_at": current_time
+            }
+        logger.info(f"Created session {session_id}")
         return session_id
 
     def get_session(self, session_id: str) -> Optional[List[Dict[str, str]]]:
-        """Get message history for a session."""
-        return self.sessions.get(session_id)
+        """Get message history for a session and update last access time."""
+        with self._session_lock:
+            session_data = self.sessions.get(session_id)
+            if session_data:
+                session_data["last_access"] = time.time()
+                return session_data["messages"]
+        return None
 
     def delete_session(self, session_id: str) -> bool:
         """Delete a session and return True if it existed."""
-        if session_id in self.sessions:
-            del self.sessions[session_id]
-            return True
+        with self._session_lock:
+            if session_id in self.sessions:
+                del self.sessions[session_id]
+                logger.info(f"Deleted session {session_id}")
+                return True
         return False
+
+    def _cleanup_expired_sessions(self) -> int:
+        """Remove sessions that have exceeded TTL. Returns count of deleted sessions."""
+        current_time = time.time()
+        expired_sessions = []
+
+        with self._session_lock:
+            for session_id, session_data in self.sessions.items():
+                time_since_access = current_time - session_data["last_access"]
+                if time_since_access > self.session_ttl_seconds:
+                    expired_sessions.append(session_id)
+
+            for session_id in expired_sessions:
+                del self.sessions[session_id]
+
+        if expired_sessions:
+            logger.info(f"Cleaned up {len(expired_sessions)} expired sessions: {expired_sessions}")
+
+        return len(expired_sessions)
+
+    async def start_cleanup_task(self, cleanup_interval_seconds: int = 300) -> None:
+        """
+        Start background task to periodically clean up expired sessions.
+
+        Args:
+            cleanup_interval_seconds: How often to run cleanup (default: 5 minutes)
+        """
+        async def cleanup_loop():
+            while True:
+                try:
+                    await asyncio.sleep(cleanup_interval_seconds)
+                    deleted_count = self._cleanup_expired_sessions()
+                    logger.debug(f"Session cleanup cycle completed. Deleted: {deleted_count}")
+                except asyncio.CancelledError:
+                    logger.info("Session cleanup task cancelled")
+                    break
+                except Exception as e:
+                    logger.error(f"Error in session cleanup task: {e}")
+
+        self._cleanup_task = asyncio.create_task(cleanup_loop())
+        logger.info(f"Started session cleanup task (interval: {cleanup_interval_seconds}s, TTL: {self.session_ttl_seconds}s)")
+
+    async def stop_cleanup_task(self) -> None:
+        """Stop the background cleanup task."""
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            logger.info("Session cleanup task stopped")
+
+    def get_session_stats(self) -> Dict[str, Any]:
+        """Get statistics about current sessions."""
+        with self._session_lock:
+            current_time = time.time()
+            session_count = len(self.sessions)
+
+            if session_count == 0:
+                return {
+                    "total_sessions": 0,
+                    "oldest_session_age_seconds": 0,
+                    "newest_session_age_seconds": 0,
+                    "ttl_seconds": self.session_ttl_seconds
+                }
+
+            ages = [current_time - s["created_at"] for s in self.sessions.values()]
+            last_accesses = [current_time - s["last_access"] for s in self.sessions.values()]
+
+            return {
+                "total_sessions": session_count,
+                "oldest_session_age_seconds": max(ages),
+                "newest_session_age_seconds": min(ages),
+                "oldest_last_access_seconds": max(last_accesses),
+                "ttl_seconds": self.session_ttl_seconds
+            }
 
     async def chat(
         self,
@@ -90,13 +186,13 @@ class ChatHandler:
 
         # Add user message to session history
         user_message = {"role": "user", "content": content}
-        self.sessions[session_id].append(user_message)
+        self.sessions[session_id]["messages"].append(user_message)
 
         # Prepare messages with system prompt
         full_messages = []
         if self.system_message:
             full_messages.append({"role": "system", "content": self.system_message})
-        full_messages.extend(self.sessions[session_id])
+        full_messages.extend(self.sessions[session_id]["messages"])
 
         # Prepare tools for function calling (convert Realtime API format to Chat API format)
         tools_schema = None
@@ -191,7 +287,7 @@ class ChatHandler:
 
         # Save assistant response to session history
         assistant_content = response.choices[0].message.content or ""
-        self.sessions[session_id].append({"role": "assistant", "content": assistant_content})
+        self.sessions[session_id]["messages"].append({"role": "assistant", "content": assistant_content})
 
         return {
             "session_id": session_id,
